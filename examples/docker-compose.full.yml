@@ -1,0 +1,68 @@
+# Full setup — all features enabled
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backup:
+    image: ganiyevuz/postgres-backup-telegram:17
+    depends_on:
+      - postgres
+    environment:
+      # Database connection
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: "mydb,analytics"    # comma-separated for multiple databases
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_PORT: 5432
+      POSTGRES_CONNECT_TIMEOUT: 30
+
+      # Backup schedule and options
+      SCHEDULE: "0 2 * * *"            # 2 AM daily
+      BACKUP_ON_START: "TRUE"          # backup immediately on container start
+      BACKUP_DIR: /backups
+      BACKUP_SUFFIX: ".sql.gz"
+      POSTGRES_EXTRA_OPTS: "-Z6"       # compression level 6
+      POSTGRES_EXCLUDE_TABLES: "django_session,celery_tasksetmeta"
+
+      # Retention policy
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+      BACKUP_KEEP_MINS: 1440
+
+      # Encryption (optional)
+      BACKUP_ENCRYPTION_KEY: "${BACKUP_ENCRYPTION_KEY}"
+
+      # Disk space safety
+      BACKUP_MIN_DISK_SPACE: 500       # MB
+
+      # Telegram notifications
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      TELEGRAM_THREAD_ID: ""           # for supergroup topics
+      TELEGRAM_NOTIFY_ON: "all"        # all | failure | success | none
+
+      # Project identification
+      PROJECT_NAME: "My Project"
+
+      # Webhooks (optional)
+      WEBHOOK_URL: ""
+      WEBHOOK_PRE_BACKUP_URL: ""
+      WEBHOOK_POST_BACKUP_URL: ""
+      WEBHOOK_ERROR_URL: ""
+
+      # Health check
+      HEALTHCHECK_PORT: 8080
+    volumes:
+      - backups:/backups
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  backups:

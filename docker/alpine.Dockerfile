@@ -6,7 +6,7 @@ ARG TARGETOS
 ARG TARGETARCH
 
 RUN set -x \
-    && apk update && apk add --no-cache ca-certificates curl \
+    && apk update && apk add --no-cache ca-certificates curl gnupg \
     && curl --fail --retry 4 --retry-all-errors -L "https://github.com/prodrigestivill/go-cron/releases/download/${GOCRONVER}/go-cron-${TARGETOS}-${TARGETARCH}-static.gz" | zcat > /usr/local/bin/go-cron \
     && chmod a+x /usr/local/bin/go-cron
 
@@ -41,11 +41,31 @@ ENV POSTGRES_DB="" \
     TELEGRAM_BOT_TOKEN_FILE="" \
     TELEGRAM_CHAT_ID_FILE="" \
     TELEGRAM_BOT_TOKEN="" \
-    TELEGRAM_CHAT_ID=""
+    TELEGRAM_CHAT_ID="" \
+    TELEGRAM_THREAD_ID="" \
+    PROJECT_NAME="" \
+    BACKUP_ENCRYPTION_KEY="" \
+    BACKUP_MIN_DISK_SPACE=100 \
+    TELEGRAM_NOTIFY_ON="all" \
+    POSTGRES_EXCLUDE_TABLES="" \
+    POSTGRES_CONNECT_TIMEOUT=30 \
+    BACKUP_MAX_AGE_HOURS=48
 
-# Copy necessary scripts and hooks
-COPY hooks /hooks
-COPY backup.sh env.sh init.sh /
+# Copy scripts and hooks
+COPY hooks/ /hooks/
+COPY scripts/ /scripts/
+RUN ln -s /scripts/backup.sh /backup.sh \
+    && ln -s /scripts/restore.sh /restore.sh \
+    && ln -s /scripts/list.sh /list.sh \
+    && ln -s /scripts/env.sh /env.sh \
+    && ln -s /scripts/init.sh /init.sh
+
+# Register CLI commands
+RUN ln -s /scripts/backup.sh /usr/local/bin/backup \
+    && ln -s /scripts/restore.sh /usr/local/bin/restore \
+    && ln -s /scripts/list.sh /usr/local/bin/list \
+    && ln -s /scripts/status.sh /usr/local/bin/status \
+    && ln -s /scripts/help.sh /usr/local/bin/help
 
 # Declare persistent volume for backups
 VOLUME /backups
@@ -55,4 +75,4 @@ ENTRYPOINT ["/init.sh"]
 
 # Healthcheck to monitor container
 HEALTHCHECK --interval=5m --timeout=3s \
-  CMD curl -f "http://localhost:${HEALTHCHECK_PORT}/" || exit 1
+  CMD /scripts/healthcheck.sh || exit 1

@@ -59,41 +59,35 @@ else
   exit 1
 fi
 
-# Telegram Bot related env
+# Telegram Bot (optional)
 if [ -n "${TELEGRAM_BOT_TOKEN_FILE}" ] && [ -r "${TELEGRAM_BOT_TOKEN_FILE}" ]; then
   # shellcheck disable=SC2155
   export TELEGRAM_BOT_TOKEN="$(cat "${TELEGRAM_BOT_TOKEN_FILE}")"
-elif [ -n "${TELEGRAM_BOT_TOKEN}" ]; then
-  export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}"
-else
-  echo "❌ Error: TELEGRAM_BOT_TOKEN is not set via environment variable or readable file."
-  exit 1
 fi
 
 if [ -n "${TELEGRAM_CHAT_ID_FILE}" ] && [ -r "${TELEGRAM_CHAT_ID_FILE}" ]; then
   # shellcheck disable=SC2155
   export TELEGRAM_CHAT_ID="$(cat "${TELEGRAM_CHAT_ID_FILE}")"
-elif [ -n "${TELEGRAM_CHAT_ID}" ]; then
-  export TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID}"
-else
-  echo "❌ Error: TELEGRAM_CHAT_ID is not set via environment variable or readable file."
-  exit 1
 fi
 
-echo "🔄 Checking Telegram bot credentials..."
-# Send a test message to Telegram and capture only message_id
-RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-     -d chat_id="${TELEGRAM_CHAT_ID}" \
-     -d text="🚀 Telegram bot credentials are working." \
-     -d parse_mode="Markdown")
-
-# Extract message_id from the response
-MESSAGE_ID=$(echo "$RESPONSE" | grep -o '"message_id":[0-9]*' | cut -d: -f2)
-
-if [[ $RESPONSE == *'"ok":true'* ]]; then
-  echo "✅ Telegram message sent successfully! (Message ID: ${MESSAGE_ID})"
+if [ -n "${TELEGRAM_BOT_TOKEN}" ] && [ -n "${TELEGRAM_CHAT_ID}" ]; then
+  echo "✅ Telegram notifications enabled."
+elif [ -n "${TELEGRAM_BOT_TOKEN}" ] && [ -z "${TELEGRAM_CHAT_ID}" ]; then
+  echo "⚠️ TELEGRAM_BOT_TOKEN is set but TELEGRAM_CHAT_ID is missing. Telegram disabled." >&2
+elif [ -z "${TELEGRAM_BOT_TOKEN}" ] && [ -n "${TELEGRAM_CHAT_ID}" ]; then
+  echo "⚠️ TELEGRAM_CHAT_ID is set but TELEGRAM_BOT_TOKEN is missing. Telegram disabled." >&2
 else
-  echo "❌ Failed to send Telegram message."
+  echo "⚠️ Telegram credentials not provided. Telegram notifications disabled."
+fi
+
+# Encryption (optional)
+if [ -n "${BACKUP_ENCRYPTION_KEY}" ]; then
+  if command -v gpg >/dev/null 2>&1; then
+    echo "✅ Backup encryption enabled (GPG)."
+  else
+    echo "❌ BACKUP_ENCRYPTION_KEY is set but gpg is not installed." >&2
+    exit 1
+  fi
 fi
 
 export PGHOST="${POSTGRES_HOST}"

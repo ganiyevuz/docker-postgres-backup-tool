@@ -1,16 +1,8 @@
 #!/bin/sh
 
-# Function to validate a URL
+# Function to validate URL format
 is_valid_url() {
-  url="$1"
-  # Check if URL is in a valid format
-  if echo "$url" | grep -E -q '^https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?$'; then
-    # Check if URL is reachable by making a simple HEAD request
-    curl --head --silent --fail "$url" > /dev/null 2>&1
-    return $?
-  else
-    return 1
-  fi
+  echo "$1" | grep -E -q '^https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?$'
 }
 
 # Function to send a webhook call
@@ -19,17 +11,24 @@ send_webhook() {
   status="$2"
   extra_args="$3"
 
+  # Skip if URL is empty
+  [ -z "$url" ] && return 0
+
   if is_valid_url "$url"; then
+    HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
     echo "Executing webhook call to ${url} with status ${status}"
-    curl --request POST \
+    # shellcheck disable=SC2086
+    curl --fail --silent --request POST \
       --url "$url" \
       --header 'Content-Type: application/json' \
-      --data "{\"status\": \"${status}\"}" \
+      --data "{\"status\": \"${status}\", \"hostname\": \"${HOSTNAME}\", \"timestamp\": \"${TIMESTAMP}\", \"database\": \"${POSTGRES_DB}\", \"project\": \"${PROJECT_NAME}\"}" \
       --max-time 10 \
       --retry 5 \
-      $extra_args
+      $extra_args > /dev/null || echo "⚠️ Webhook call to ${url} failed." >&2
   else
-    echo "Invalid URL: ${url}"
+    echo "⚠️ Invalid webhook URL: ${url}" >&2
   fi
 }
 

@@ -16,12 +16,12 @@ variable "BUILD_REVISION" {
 
 target "debian" {
 	args = {"GOCRONVER" = "v0.0.11"}
-	dockerfile = "debian.Dockerfile"
+	dockerfile = "docker/debian.Dockerfile"
 }
 
 target "alpine" {
 	args = {"GOCRONVER" = "v0.0.11"}
-	dockerfile = "alpine.Dockerfile"
+	dockerfile = "docker/alpine.Dockerfile"
 }
 
 target "debian-latest" {

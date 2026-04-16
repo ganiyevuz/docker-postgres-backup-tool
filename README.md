@@ -1,221 +1,395 @@
-![Docker pulls](https://img.shields.io/docker/pulls/ganiyevuz/postgres-backup-telegram)
-![GitHub actions](https://github.com/ganiyevuz/docker-postgres-backup-telegram/actions/workflows/ci.yml/badge.svg?branch=main)
-
 # postgres-backup-telegram
 
-Backup PostgresSQL to the local filesystem with periodic rotating backups, based
-on [schickling/postgres-backup-s3](https://hub.docker.com/r/schickling/postgres-backup-s3/).
-Additionally, it can send the **latest backup file via a Telegram bot**.
-Backup multiple databases from the same host by setting the database names in `POSTGRES_DB` separated by commas or
-spaces.
+![Docker Pulls](https://img.shields.io/docker/pulls/ganiyevuz/postgres-backup-telegram)
+[![CI](https://github.com/ganiyevuz/docker-postgres-backup-telegram/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ganiyevuz/docker-postgres-backup-telegram/actions)
+![License](https://img.shields.io/github/license/ganiyevuz/docker-postgres-backup-telegram)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13%20%7C%2014%20%7C%2015%20%7C%2016%20%7C%2017-336791?logo=postgresql&logoColor=white)
 
-Supports the following Docker architectures: `linux/amd64`, `linux/arm64`, `linux/arm/v7`, `linux/s390x`,
-`linux/ppc64le`.
+Automated PostgreSQL backups in Docker with rotating retention, Telegram notifications, optional GPG encryption, and built-in restore tooling.
 
-Please consider reading detailed the [How the backups folder works?](#how-the-backups-folder-works).
+Supports multiple databases, cluster-wide dumps (`pg_dumpall`), table exclusion, disk space checks, backup verification, webhook integrations, and Docker secrets. Available for **linux/amd64**, **linux/arm64**, **linux/arm/v7**, **linux/s390x**, and **linux/ppc64le** in both Debian and Alpine variants.
 
-This application requires the docker volume `/backups` to be a POSIX-compliant filesystem to store the backups (mainly
-with support for hardlinks and softlinks). So filesystems like VFAT, EXFAT, SMB/CIFS, ... can't be used with this docker
-image.
+---
 
-## Usage
+## Quick Start
 
-Docker:
-
-```sh
-docker run -u postgres:postgres -e POSTGRES_HOST=postgres -e POSTGRES_DB=dbname -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password  ganiyevuz/postgres-backup-telegram
-```
-
-Docker Compose:
+Create a `docker-compose.yml` (see also [`examples/`](examples/)):
 
 ```yaml
-version: '2'
 services:
   postgres:
-    image: postgres
-    restart: always
+    image: postgres:17
     environment:
-      - POSTGRES_DB=database
-      - POSTGRES_USER=username
-      - POSTGRES_PASSWORD=password
-      #  - POSTGRES_PASSWORD_FILE=/run/secrets/db_password <-- alternative for POSTGRES_PASSWORD (to use with docker secrets)
-  pgbackups:
-    image: ganiyevuz/postgres-backup-telegram
-    restart: always
-    user: postgres:postgres # Optional: see below
+      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
     volumes:
-      - /var/opt/pgbackups:/backups
-    links:
-      - postgres
+      - pgdata:/var/lib/postgresql/data
+
+  backup:
+    image: ganiyevuz/postgres-backup-telegram:17
     depends_on:
       - postgres
     environment:
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=database
-      - POSTGRES_USER=username
-      - POSTGRES_PASSWORD=password
-      #  - POSTGRES_PASSWORD_FILE=/run/secrets/db_password <-- alternative for POSTGRES_PASSWORD (to use with docker secrets)
-      - POSTGRES_EXTRA_OPTS=-Z1 --schema=public --blobs
-      - SCHEDULE=@daily
-      - BACKUP_ON_START=TRUE
-      - BACKUP_KEEP_DAYS=7
-      - BACKUP_KEEP_WEEKS=4
-      - BACKUP_KEEP_MONTHS=6
-      - HEALTHCHECK_PORT=8080
-      - TELEGRAM_BOT_TOKEN=123456:xxxxx
-      - TELEGRAM_CHAT_ID=123456
-      #  - TELEGRAM_BOT_TOKEN_FILE=/run/secrets/bot_token  <-- alternative for TELEGRAM_BOT_TOKEN (to use with docker secrets)
-      #  - TELEGRAM_CHAT_FILE=/run/secrets/chat_id  <-- alternative for TELEGRAM_CHAT_ID (to use with docker secrets)
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      SCHEDULE: "@daily"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+    volumes:
+      - backups:/backups
+
+volumes:
+  pgdata:
+  backups:
 ```
 
-For security reasons it is recommended to run it as user `postgres:postgres`.
+```sh
+docker compose up -d
+```
 
-In case of running as `postgres` user, the system administrator must initialize the permission of the destination folder
-as follows:
+For a full-featured example with encryption, webhooks, retention tuning, and more, see [`examples/docker-compose.full.yml`](examples/docker-compose.full.yml).
+
+---
+
+## Environment Variables
+
+### Database Connection
+
+| Variable | Default | Description |
+|---|---|---|
+| `POSTGRES_HOST` | **required** | PostgreSQL hostname |
+| `POSTGRES_PORT` | `5432` | PostgreSQL port |
+| `POSTGRES_USER` | **required** | PostgreSQL user |
+| `POSTGRES_PASSWORD` | **required** | PostgreSQL password |
+| `POSTGRES_DB` | **required** | Database name(s), comma-separated for multiple |
+| `POSTGRES_EXTRA_OPTS` | `-Z1` | Extra flags passed to `pg_dump` / `pg_dumpall` |
+| `POSTGRES_CLUSTER` | `FALSE` | Set `TRUE` to use `pg_dumpall` for a full cluster dump |
+| `POSTGRES_EXCLUDE_TABLES` | `""` | Comma-separated tables to exclude from the dump |
+| `POSTGRES_CONNECT_TIMEOUT` | `30` | Seconds to wait for `pg_isready` connectivity check |
+
+Docker secrets alternatives: `POSTGRES_USER_FILE`, `POSTGRES_PASSWORD_FILE`, `POSTGRES_DB_FILE`, `POSTGRES_PASSFILE_STORE`.
+
+### Backup Schedule and Retention
+
+| Variable | Default | Description |
+|---|---|---|
+| `SCHEDULE` | `@daily` | Cron expression ([syntax reference](http://godoc.org/github.com/robfig/cron#hdr-Predefined_schedules)) |
+| `BACKUP_ON_START` | `FALSE` | Run a backup immediately on container start |
+| `VALIDATE_ON_START` | `TRUE` | Validate configuration on startup |
+| `BACKUP_DIR` | `/backups` | Directory inside the container to store backups |
+| `BACKUP_SUFFIX` | `.sql.gz` | Filename suffix for backup files |
+| `BACKUP_LATEST_TYPE` | `symlink` | How to create the `latest` pointer: `symlink`, `hardlink`, or `none` |
+| `BACKUP_KEEP_DAYS` | `7` | Days to retain daily backups |
+| `BACKUP_KEEP_WEEKS` | `4` | Weeks to retain weekly backups |
+| `BACKUP_KEEP_MONTHS` | `6` | Months to retain monthly backups |
+| `BACKUP_KEEP_MINS` | `1440` | Minutes to retain backups in the `last` folder |
+
+### Encryption
+
+| Variable | Default | Description |
+|---|---|---|
+| `BACKUP_ENCRYPTION_KEY` | `""` | GPG passphrase for AES-256 encryption. Leave empty to disable |
+
+### Telegram Notifications
+
+| Variable | Default | Description |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | | Bot token from [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_CHAT_ID` | | Chat ID (get it from [@userinfobot](https://t.me/userinfobot)) |
+| `TELEGRAM_THREAD_ID` | `""` | Message thread ID for supergroup topics |
+| `TELEGRAM_NOTIFY_ON` | `all` | When to send notifications: `all`, `failure`, `success`, `none` |
+| `PROJECT_NAME` | `""` | Label included in Telegram captions and alerts |
+
+Docker secrets alternatives: `TELEGRAM_BOT_TOKEN_FILE`, `TELEGRAM_CHAT_ID_FILE`.
+
+Backup files under 50 MB are sent as documents to the configured chat. Files exceeding the Telegram limit are reported with a text alert instead.
+
+### Webhooks
+
+| Variable | Default | Description |
+|---|---|---|
+| `WEBHOOK_URL` | | Called on both success and error |
+| `WEBHOOK_ERROR_URL` | | Called only on error |
+| `WEBHOOK_PRE_BACKUP_URL` | | Called before backup starts |
+| `WEBHOOK_POST_BACKUP_URL` | | Called after successful backup |
+| `WEBHOOK_EXTRA_ARGS` | | Additional `curl` arguments for webhook calls |
+
+All webhook calls send a JSON payload with `status`, `hostname`, `timestamp`, `database`, and `project` fields.
+
+### Health and Advanced
+
+| Variable | Default | Description |
+|---|---|---|
+| `HEALTHCHECK_PORT` | `8080` | Port for the health check endpoint |
+| `BACKUP_MAX_AGE_HOURS` | `48` | Hours before a backup is considered stale (used by healthcheck) |
+| `BACKUP_MIN_DISK_SPACE` | `100` | Minimum free disk space (MB) required before starting a backup |
+| `TZ` | | POSIX timezone (e.g. `Europe/Berlin`) for schedule evaluation |
+
+---
+
+## CLI Commands
+
+All commands are available inside the container via `docker exec`:
+
+### `backup` -- Trigger a manual backup
+
+Runs a full backup cycle immediately: dump, verify, encrypt (if enabled), rotate, send to Telegram, and clean old files.
 
 ```sh
-# for default images (debian)
+docker exec -it my-backup backup
+```
+
+```
+Checking database connectivity (timeout: 30s)...
+Database is reachable.
+Disk space OK (45032MB available).
+Creating dump of mydb database from postgres...
+Backup created: /backups/last/mydb-20260416-143000.sql.gz (42M, 8s)
+Backup sent to Telegram.
+Cleaning older files for mydb...
+----------------------------------------
+Backup completed in 12s: 1 succeeded, 0 failed
+----------------------------------------
+```
+
+### `restore` -- Restore from a backup
+
+Without arguments, shows an interactive picker. With a file path, restores directly. Auto-detects format (`.sql.gz`, `.sql.gz.gpg`, directory, tar.gz) and handles GPG decryption automatically.
+
+```sh
+# Interactive mode -- pick from a numbered list
+docker exec -it my-backup restore
+
+# Direct restore from a specific file
+docker exec -it my-backup restore /backups/last/mydb-latest.sql.gz
+
+# Restore into a different database
+docker exec -it my-backup restore /backups/daily/mydb-20260416.sql.gz mydb_staging
+```
+
+Interactive mode output:
+
+```
+----------------------------------------
+  Available Backups
+----------------------------------------
+  [ 1] 42M     2026-04-16 14:30  last/mydb-20260416-143000.sql.gz
+  [ 2] 42M     2026-04-16 14:30  last/mydb-latest.sql.gz
+  [ 3] 42M     2026-04-16 02:00  daily/mydb-20260416.sql.gz
+  [ 4] 38M     2026-04-14 02:00  weekly/mydb-202616.sql.gz
+  [ 5] 35M     2026-04-01 02:00  monthly/mydb-202604.sql.gz
+----------------------------------------
+
+Select backup number [1-5]: 3
+
+Selected: /backups/daily/mydb-20260416.sql.gz
+
+Target database (leave empty to auto-detect): 
+
+----------------------------------------
+Restore Details:
+  Source: /backups/daily/mydb-20260416.sql.gz
+  Target: mydb@postgres:5432
+----------------------------------------
+
+This will restore data into database 'mydb'.
+Existing data may be overwritten.
+
+Continue? [y/N]: y
+Detected compressed SQL dump.
+Restoring mydb...
+----------------------------------------
+Restore completed in 15s: mydb@postgres
+----------------------------------------
+```
+
+### `list` -- List all backups
+
+Shows all backup files grouped by rotation slot with sizes, dates, and indicators for `[latest]` and `[encrypted]` files.
+
+```sh
+# List all backups
+docker exec -it my-backup list
+
+# Filter by database name
+docker exec -it my-backup list mydb
+
+# Preview what the retention policy would delete (dry run)
+docker exec -it my-backup list --cleanup-preview
+```
+
+List output:
+
+```
++======================================+
+|  LAST                                |
++======================================+
+|  42M   2026-04-16 14:30  mydb-20260416-143000.sql.gz
+|  42M   2026-04-16 14:30  mydb-latest.sql.gz [latest]
++======================================+
+
++======================================+
+|  DAILY                               |
++======================================+
+|  42M   2026-04-16 02:00  mydb-20260416.sql.gz
+|  41M   2026-04-15 02:00  mydb-20260415.sql.gz
+|  42M   2026-04-16 02:00  mydb-latest.sql.gz [latest]
++======================================+
+
+Disk usage: 168M total
+Available:  45G
+```
+
+Cleanup preview output:
+
+```
+========================================
+  Cleanup Preview (dry run)
+========================================
+
+Current retention policy:
+  Last:    keep 1440 minutes
+  Daily:   keep 7 days
+  Weekly:  keep 29 days
+  Monthly: keep 187 days
+
+Would delete from daily/:
+  (trash)  41M  2026-04-08 02:00  mydb-20260408.sql.gz
+  (trash)  40M  2026-04-07 02:00  mydb-20260407.sql.gz
+
+----------------------------------------
+Total: 2 files would be deleted
+----------------------------------------
+```
+
+### `status` -- System status overview
+
+Shows current configuration, last backup result, backup inventory counts, disk usage, and lock status at a glance.
+
+```sh
+docker exec -it my-backup status
+```
+
+```
+========================================
+  Backup System Status
+========================================
+
+Configuration:
+  Host:       postgres
+  Port:       5432
+  Databases:  mydb,analytics
+  Schedule:   0 2 * * *
+  Cluster:    FALSE
+  Project:    My Project
+  Encryption: enabled (AES-256)
+  Telegram:   enabled (notify: all)
+
+Retention Policy:
+  Keep last:    1440 minutes
+  Keep daily:   7 days
+  Keep weekly:  4 weeks
+  Keep monthly: 6 months
+
+Last Backup:
+  Status:     OK
+  Time:       2026-04-16 02:00:12 (14h ago)
+
+Backup Inventory:
+  last:      3 files
+  daily:     7 files
+  weekly:    4 files
+  monthly:   6 files
+
+Disk Usage:
+  Backups:    1.2G
+  Available:  45G
+  Min space:  100MB
+
+Backup Lock:  idle (not running)
+========================================
+```
+
+### `help` -- Show available commands
+
+Prints a quick reference of all commands, usage examples, and key environment variables.
+
+```sh
+docker exec -it my-backup help
+```
+
+---
+
+## How Backups Work
+
+Each backup cycle creates a timestamped file in the `last` folder, then hard-links it into `daily`, `weekly`, and `monthly` folders. Hard links save disk space -- all folders reference the same data on disk.
+
+```
+/backups/
+  last/
+    mydb-20260416-020000.sql.gz       # every backup
+    mydb-latest.sql.gz -> (symlink)
+  daily/
+    mydb-20260416.sql.gz              # latest backup of the day
+  weekly/
+    mydb-202616.sql.gz                # latest backup of the ISO week
+  monthly/
+    mydb-202604.sql.gz                # latest backup of the month
+```
+
+Retention cleanup runs after each successful backup, removing files older than the configured thresholds. Each folder is cleaned independently using its own `BACKUP_KEEP_*` variable.
+
+A lock file (`flock`) prevents overlapping backup runs.
+
+> The `/backups` volume must be a POSIX-compliant filesystem with hardlink and symlink support. VFAT, exFAT, and SMB/CIFS are not supported.
+
+---
+
+## Hooks
+
+Place executable scripts in the `/hooks` directory inside the container. They are invoked via `run-parts` with one of three arguments:
+
+- `pre-backup` -- before the backup starts
+- `post-backup` -- after a successful backup
+- `error` -- when a backup fails
+
+The included `00-webhook` hook implements the webhook environment variables described above. Add your own scripts alongside it for custom integrations.
+
+---
+
+## Security Notes
+
+- Run the container as `postgres:postgres` for least-privilege operation.
+- Use Docker secrets (`*_FILE` variables) instead of plain-text passwords in production.
+- Enable `BACKUP_ENCRYPTION_KEY` to encrypt backups at rest with GPG AES-256.
+- The healthcheck runs on an internal port (`8080` by default) -- do not expose it publicly unless needed.
+
+### File permissions for the backup volume
+
+```sh
+# Debian-based image (UID 999)
 mkdir -p /var/opt/pgbackups && chown -R 999:999 /var/opt/pgbackups
-# for alpine images
+
+# Alpine-based image (UID 70)
 mkdir -p /var/opt/pgbackups && chown -R 70:70 /var/opt/pgbackups
 ```
 
-### Environment Variables
+---
 
-Most variables are the same as in the [official postgres image](https://hub.docker.com/_/postgres/).
+## Image Tags
 
-| env variable            | description                                                                                                                                                                                                                                                                     |
-|-------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| BACKUP_DIR              | Directory to save the backup at. Defaults to `/backups`.                                                                                                                                                                                                                        |
-| BACKUP_SUFFIX           | Filename suffix to save the backup. Defaults to `.sql.gz`.                                                                                                                                                                                                                      |
-| BACKUP_ON_START         | If set to `TRUE` performs an backup on each container start or restart. Defaults to `FALSE`.                                                                                                                                                                                    |
-| BACKUP_KEEP_DAYS        | Number of daily backups to keep before removal. Defaults to `7`.                                                                                                                                                                                                                |
-| BACKUP_KEEP_WEEKS       | Number of weekly backups to keep before removal. Defaults to `4`.                                                                                                                                                                                                               |
-| BACKUP_KEEP_MONTHS      | Number of monthly backups to keep before removal. Defaults to `6`.                                                                                                                                                                                                              |
-| BACKUP_KEEP_MINS        | Number of minutes for `last` folder backups to keep before removal. Defaults to `1440`.                                                                                                                                                                                         |
-| BACKUP_LATEST_TYPE      | Type of `latest` pointer (`symlink`,`hardlink`,`none`). Defaults to `symlink`.                                                                                                                                                                                                  |
-| VALIDATE_ON_START       | If set to `FALSE` does not validate the configuration on start. Disabling this is not recommended. Defaults to `TRUE`.                                                                                                                                                          |
-| HEALTHCHECK_PORT        | Port listening for cron-schedule health check. Defaults to `8080`.                                                                                                                                                                                                              |
-| POSTGRES_DB             | Comma or space separated list of postgres databases to backup. If POSTGRES_CLUSTER is set this refers to the database to connect to for dumping global objects and discovering what other databases should be dumped (typically is either `postgres` or `template1`). Required. |
-| POSTGRES_DB_FILE        | Alternative to POSTGRES_DB, but with one database per line, for usage with docker secrets.                                                                                                                                                                                      |
-| POSTGRES_EXTRA_OPTS     | Additional [options](https://www.postgresql.org/docs/12/app-pgdump.html#PG-DUMP-OPTIONS) for `pg_dump` (or `pg_dumpall` [options](https://www.postgresql.org/docs/12/app-pg-dumpall.html#id-1.9.4.13.6) if POSTGRES_CLUSTER is set). Defaults to `-Z1`.                         |
-| POSTGRES_CLUSTER        | Set to `TRUE` in order to use `pg_dumpall` instead. Also set POSTGRES_EXTRA_OPTS to any value or empty since the default value is not compatible with `pg_dumpall`.                                                                                                             |
-| POSTGRES_HOST           | Postgres connection parameter; postgres host to connect to. Required.                                                                                                                                                                                                           |
-| POSTGRES_PASSWORD       | Postgres connection parameter; postgres password to connect with. Required.                                                                                                                                                                                                     |
-| POSTGRES_PASSWORD_FILE  | Alternative to POSTGRES_PASSWORD, for usage with docker secrets.                                                                                                                                                                                                                |
-| POSTGRES_PASSFILE_STORE | Alternative to POSTGRES_PASSWORD in [passfile format](https://www.postgresql.org/docs/12/libpq-pgpass.html#LIBPQ-PGPASS), for usage with postgres clusters.                                                                                                                     |
-| POSTGRES_PORT           | Postgres connection parameter; postgres port to connect to. Defaults to `5432`.                                                                                                                                                                                                 |
-| POSTGRES_USER           | Postgres connection parameter; postgres user to connect with. Required.                                                                                                                                                                                                         |
-| POSTGRES_USER_FILE      | Alternative to POSTGRES_USER, for usage with docker secrets.                                                                                                                                                                                                                    |
-| SCHEDULE                | [Cron-schedule](http://godoc.org/github.com/robfig/cron#hdr-Predefined_schedules) specifying the interval between postgres backups. Defaults to `@daily`.                                                                                                                       |
-| TZ                      | [POSIX TZ variable](https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html) specifying the timezone used to evaluate SCHEDULE cron (example "Europe/Paris").                                                                                                       |
-| WEBHOOK_URL             | URL to be called after an error or after a successful backup (POST with a JSON payload, check `hooks/00-webhook` file for more info). Default disabled.                                                                                                                         |
-| WEBHOOK_ERROR_URL       | URL to be called in case backup fails. Default disabled.                                                                                                                                                                                                                        |
-| WEBHOOK_PRE_BACKUP_URL  | URL to be called when backup starts. Default disabled.                                                                                                                                                                                                                          |
-| WEBHOOK_POST_BACKUP_URL | URL to be called when backup completes successfully. Default disabled.                                                                                                                                                                                                          |
-| TELEGRAM_BOT_TOKEN_FILE | Path to a file containing the Telegram bot token. If set, the bot token will be read from this file. If not set, `TELEGRAM_BOT_TOKEN` must be provided. You can create a bot and get a token using [@BotFather](https://t.me/BotFather) on Telegram.                            |
-| TELEGRAM_BOT_TOKEN      | he Telegram bot token used to send backup files to a chat. If `TELEGRAM_BOT_TOKEN_FILE` is set, this value is ignored. Generate a bot token via [@BotFather](https://t.me/BotFather).                                                                                           |
-| TELEGRAM_CHAT_ID_FILE   | Path to a file containing the Telegram chat ID. If set, the chat ID will be read from this file. If not set, `TELEGRAM_CHAT_ID` must be provided. To get your chat ID, send a message to [@userinfobot](https://t.me/userinfobot), and it will return your chat ID.             |
-| TELEGRAM_CHAT_ID        | he Telegram chatID where the bot will send backup files. If `TELEGRAM_CHAT_ID_FILE` is set, this value is ignored. Retrieve your chat ID by messaging [@userinfobot](https://t.me/userinfobot) on Telegram.                                                                     |
+Images are published as `ganiyevuz/postgres-backup-telegram:<pg-version>[-alpine]`.
 
-#### Special Environment Variables
+| Tag | Base | PostgreSQL |
+|---|---|---|
+| `17`, `16`, `15`, `14`, `13` | Debian | Matching version |
+| `17-alpine`, `16-alpine`, ... | Alpine | Matching version |
 
-This variables are not intended to be used for normal deployment operations:
+---
 
-| env variable                | description                                        |
-|-----------------------------|----------------------------------------------------|
-| POSTGRES_PORT_5432_TCP_ADDR | Sets the POSTGRES_HOST when the latter is not set. |
-| POSTGRES_PORT_5432_TCP_PORT | Sets POSTGRES_PORT when POSTGRES_HOST is not set.  |
+## License
 
-### How the backups folder works?
-
-First, a new backup is created in the `last` folder with the full timestamp.
-
-Once this backup is successfully completed, it is **hard-linked** (instead of copying, to save disk space) to the appropriate backup folders: **daily, weekly, and monthly**. This process ensures that only the latest backup is retained for each category.  
-- The **daily folder** keeps the most recent backup for the day.  
-- The **weekly folder** stores the latest backup for the week.  
-- The **monthly folder** retains the latest backup for the month (not the first backup of the month).  
-
-After storing the backup, the **Telegram bot automatically sends the latest backup file to the configured chat** as a message, ensuring quick and remote access to your backups.  
-
-So the backup folder are structured as follows:
-
-* `BACKUP_DIR/last/DB-YYYYMMDD-HHmmss.sql.gz`: all the backups are stored separatly in this folder.
-* `BACKUP_DIR/daily/DB-YYYYMMDD.sql.gz`: always store (hard link) the **latest** backup of that day.
-* `BACKUP_DIR/weekly/DB-YYYYww.sql.gz`: always store (hard link) the **latest** backup of that week (the last day of the
-  week will be Sunday as it uses ISO week numbers).
-* `BACKUP_DIR/monthly/DB-YYYYMM.sql.gz`: always store (hard link) the **latest** backup of that month (normally the ~
-  31st).
-
-And the following symlinks are also updated after each successfull backup for simlicity:
-
-```
-BACKUP_DIR/last/DB-latest.sql.gz -> BACKUP_DIR/last/DB-YYYYMMDD-HHmmss.sql.gz
-BACKUP_DIR/daily/DB-latest.sql.gz -> BACKUP_DIR/daily/DB-YYYYMMDD.sql.gz
-BACKUP_DIR/weekly/DB-latest.sql.gz -> BACKUP_DIR/weekly/DB-YYYYww.sql.gz
-BACKUP_DIR/monthly/DB-latest.sql.gz -> BACKUP_DIR/monthly/DB-YYYYMM.sql.gz
-```
-
-For **cleaning** the script removes the files for each category only if the new backup has been successfull.
-To do so it is using the following independent variables:
-
-* BACKUP_KEEP_MINS: will remove files from the `last` folder that are older than its value in minutes after a new
-  successfull backup without affecting the rest of the backups (because they are hard links).
-* BACKUP_KEEP_DAYS: will remove files from the `daily` folder that are older than its value in days after a new
-  successfull backup.
-* BACKUP_KEEP_WEEKS: will remove files from the `weekly` folder that are older than its value in weeks after a new
-  successfull backup (remember that it starts counting from the end of each week not the beggining).
-* BACKUP_KEEP_MONTHS: will remove files from the `monthly` folder that are older than its value in months (of 31 days)
-  after a new successfull backup (remember that it starts counting from the end of each month not the beggining).
-
-### Hooks
-
-The folder `hooks` inside the container can contain hooks/scripts to be run in differrent cases getting the exact
-situation as a first argument (`error`, `pre-backup` or `post-backup`).
-
-Just create an script in that folder with execution permission so
-that [run-parts](https://manpages.debian.org/stable/debianutils/run-parts.8.en.html) can execute it on each state
-change.
-
-Please, as an example take a look in the script already present there that implements the `WEBHOOK_URL` functionality.
-
-### Manual Backups
-
-By default this container makes daily backups, but you can start a manual backup by running `/backup.sh`.
-
-This script as example creates one backup as the running user and saves it the working folder.
-
-```sh
-docker run --rm -v "$PWD:/backups" -u "$(id -u):$(id -g)" -e POSTGRES_HOST=postgres -e POSTGRES_DB=dbname -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password  ganiyevuz/postgres-backup-telegram /backup.sh
-```
-
-### Automatic Periodic Backups
-
-You can change the `SCHEDULE` environment variable in `-e SCHEDULE="@daily"` to alter the default frequency. Default is
-`daily`.
-
-More information about the scheduling can be
-found [here](http://godoc.org/github.com/robfig/cron#hdr-Predefined_schedules).
-
-Folders `daily`, `weekly` and `monthly` are created and populated using hard links to save disk space.
-
-## Restore examples
-
-Some examples to restore/apply the backups.
-
-### Restore using the same container
-
-To restore using the same backup container, replace `$BACKUPFILE`, `$CONTAINER`, `$USERNAME` and `$DBNAME` from the
-following command:
-
-```sh
-docker exec --tty --interactive $CONTAINER /bin/sh -c "zcat $BACKUPFILE | psql --username=$USERNAME --dbname=$DBNAME -W"
-```
-
-### Restore using a new container
-
-Replace `$BACKUPFILE`, `$VERSION`, `$HOSTNAME`, `$PORT`, `$USERNAME` and `$DBNAME` from the following command:
-
-```sh
-docker run --rm --tty --interactive -v $BACKUPFILE:/tmp/backupfile.sql.gz postgres:$VERSION /bin/sh -c "zcat /tmp/backupfile.sql.gz | psql --host=$HOSTNAME --port=$PORT --username=$USERNAME --dbname=$DBNAME -W"
-```
+See [LICENSE](LICENSE) for details.

@@ -30,6 +30,40 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
+    # Shared env vars for all test steps
+    env:
+      POSTGRES_DB: "database"
+      POSTGRES_USER: "user"
+      POSTGRES_PASSWORD: "test"
+      POSTGRES_HOST: "127.0.0.1"
+      POSTGRES_PORT: 5432
+      POSTGRES_EXTRA_OPTS: "-Z0"
+      BACKUP_DIR: "/tmp/backups"
+      POSTGRES_DB_FILE: ""
+      POSTGRES_USER_FILE: ""
+      POSTGRES_PASSWORD_FILE: ""
+      POSTGRES_PASSFILE_STORE: ""
+      POSTGRES_CLUSTER: "FALSE"
+      POSTGRES_EXCLUDE_TABLES: ""
+      BACKUP_SUFFIX: ".sql.gz"
+      BACKUP_LATEST_TYPE: "symlink"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+      BACKUP_KEEP_MINS: 1440
+      BACKUP_ENCRYPTION_KEY: ""
+      BACKUP_MIN_DISK_SPACE: 100
+      WEBHOOK_URL: ""
+      WEBHOOK_EXTRA_ARGS: ""
+      TELEGRAM_BOT_TOKEN_FILE: ""
+      TELEGRAM_CHAT_ID_FILE: ""
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_THREAD_ID: ""
+      TELEGRAM_NOTIFY_ON: "all"
+      PROJECT_NAME: "CI Test"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -43,116 +77,72 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-16
 
-
-      - name: Test backup script for pg_dump
-        env:
-          POSTGRES_DB: "database"
-          POSTGRES_USER: "user"
-          POSTGRES_PASSWORD: "test"
-          POSTGRES_HOST: "127.0.0.1"
-          POSTGRES_PORT: 5432
-          POSTGRES_EXTRA_OPTS: "-Z0"
-          BACKUP_DIR: "/tmp/backups"
-          # Defaults
-          POSTGRES_DB_FILE: ""
-          POSTGRES_USER_FILE: ""
-          POSTGRES_PASSWORD_FILE: ""
-          POSTGRES_PASSFILE_STORE: ""
-          POSTGRES_CLUSTER: "FALSE"
-          BACKUP_SUFFIX: ".sql.gz"
-          BACKUP_LATEST_TYPE: "symlink"
-          BACKUP_KEEP_DAYS: 7
-          BACKUP_KEEP_WEEKS: 4
-          BACKUP_KEEP_MONTHS: 6
-          BACKUP_KEEP_MINS: 1440
-          WEBHOOK_URL: ""
-          WEBHOOK_EXTRA_ARGS: ""
-          TELEGRAM_BOT_TOKEN_FILE: ""
-          TELEGRAM_CHAT_ID_FILE: ""
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
+      - name: Test pg_dump backup
         run: |
-          echo "Test backup script for pg_dump..."
-          rm -fR "$BACKUP_DIR"
-          mkdir -p "$BACKUP_DIR"
-          bash -x backup.sh
-          echo "Generated backup files:"
+          rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
+          bash -x scripts/backup.sh
           ls -laR "$BACKUP_DIR"
 
-      - name: Test backup script for pg_dump with directories
+      - name: Test pg_dump with directory format
         env:
-          POSTGRES_DB: "database"
-          POSTGRES_USER: "user"
-          POSTGRES_PASSWORD: "test"
-          POSTGRES_HOST: "127.0.0.1"
-          POSTGRES_PORT: 5432
           POSTGRES_EXTRA_OPTS: "-Z0 -Fd"
-          BACKUP_DIR: "/tmp/backups"
-          # Defaults
-          POSTGRES_DB_FILE: ""
-          POSTGRES_USER_FILE: ""
-          POSTGRES_PASSWORD_FILE: ""
-          POSTGRES_PASSFILE_STORE: ""
-          POSTGRES_CLUSTER: "FALSE"
-          BACKUP_SUFFIX: ".sql.gz"
-          BACKUP_LATEST_TYPE: "symlink"
-          BACKUP_KEEP_DAYS: 7
-          BACKUP_KEEP_WEEKS: 4
-          BACKUP_KEEP_MONTHS: 6
-          BACKUP_KEEP_MINS: 1440
-          WEBHOOK_URL: ""
-          WEBHOOK_EXTRA_ARGS: ""
-          TELEGRAM_BOT_TOKEN_FILE: ""
-          TELEGRAM_CHAT_FILE: ""
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          echo "Test backup script for pg_dump with directories..."
-          rm -fR "$BACKUP_DIR"
-          mkdir -p "$BACKUP_DIR"
-          bash -x backup.sh
-          echo "Generated backup files:"
+          rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
+          bash -x scripts/backup.sh
           ls -laR "$BACKUP_DIR"
 
-      - name: Test backup script for pg_dumpall
+      - name: Test pg_dumpall (cluster mode)
         env:
           POSTGRES_CLUSTER: "TRUE"
-          POSTGRES_DB: "database"
-          POSTGRES_USER: "user"
-          POSTGRES_PASSWORD: "test"
-          POSTGRES_HOST: "127.0.0.1"
-          POSTGRES_PORT: 5432
           POSTGRES_EXTRA_OPTS: ""
-          BACKUP_DIR: "/tmp/backups"
-          # Defaults
-          POSTGRES_DB_FILE: ""
-          POSTGRES_USER_FILE: ""
-          POSTGRES_PASSWORD_FILE: ""
-          POSTGRES_PASSFILE_STORE: ""
-          BACKUP_SUFFIX: ".sql.gz"
-          BACKUP_LATEST_TYPE: "symlink"
-          BACKUP_KEEP_DAYS: 7
-          BACKUP_KEEP_WEEKS: 4
-          BACKUP_KEEP_MONTHS: 6
-          BACKUP_KEEP_MINS: 1440
-          WEBHOOK_URL: ""
-          WEBHOOK_EXTRA_ARGS: ""
-          TELEGRAM_BOT_TOKEN_FILE: ""
-          TELEGRAM_CHAT_FILE: ""
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          echo "Test backup script for pg_dumpall..."
-          rm -fR "$BACKUP_DIR"
-          mkdir -p "$BACKUP_DIR"
-          bash -x backup.sh
-          echo "Generated backup files:"
+          rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
+          bash -x scripts/backup.sh
+          ls -laR "$BACKUP_DIR"
+
+      - name: Test backup with table exclusion
+        env:
+          POSTGRES_EXCLUDE_TABLES: "pg_stat_statements"
+        run: |
+          rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
+          bash -x scripts/backup.sh
+          ls -laR "$BACKUP_DIR"
+
+      - name: Test backup with GPG encryption
+        env:
+          BACKUP_ENCRYPTION_KEY: "test-encryption-key"
+        run: |
+          rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
+          bash -x scripts/backup.sh
+          echo "Verifying encrypted files exist:"
+          find "$BACKUP_DIR" -name "*.gpg" | head -20
+          test -f "$BACKUP_DIR/last/database-"*".sql.gz.gpg" || (echo "No encrypted backup found" && exit 1)
+
+      - name: Test list command
+        run: |
+          bash scripts/list.sh
+
+      - name: Test restore command (non-interactive)
+        run: |
+          LATEST=$(find "$BACKUP_DIR/last" -name "database-*.sql.gz" ! -name "*latest*" ! -name "*.gpg" | head -1)
+          if [ -n "$LATEST" ]; then
+            echo "y" | bash scripts/restore.sh "$LATEST" database
+          else
+            echo "No backup file found for restore test, skipping."
+          fi
+
+      - name: Test backup with Telegram disabled
+        env:
+          TELEGRAM_BOT_TOKEN: ""
+          TELEGRAM_CHAT_ID: ""
+          TELEGRAM_NOTIFY_ON: "none"
+        run: |
+          rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
+          bash -x scripts/backup.sh
           ls -laR "$BACKUP_DIR"
 
       - name: Test docker-bake.hcl contents
         run: |
-          echo "Test if docker-bake.hcl has been generated correctly..."
           ./generate-docker-bake.sh docker-bake-generated.hcl
           cmp docker-bake.hcl docker-bake-generated.hcl
 
