@@ -89,7 +89,7 @@ get_size_bytes() {
 encrypt_file() {
   local file="$1"
   if [ -n "${BACKUP_ENCRYPTION_KEY}" ]; then
-    echo "🔒 Encrypting ${file}..."
+    echo "🔒 Encrypting ${file}..." >&2
     gpg --symmetric --batch --yes --passphrase "${BACKUP_ENCRYPTION_KEY}" \
       --cipher-algo AES256 -o "${file}.gpg" "${file}"
     rm -f "${file}"
