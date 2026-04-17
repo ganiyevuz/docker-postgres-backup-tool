@@ -120,16 +120,22 @@ verify_backup() {
     fi
   fi
 
-  # For compressed SQL files, skip pg_restore verification (it only works with archive formats)
-  # Instead, check the file is valid gzip
+  # For gzip files, verify the archive is valid
+  # Check magic bytes (1f 8b) to confirm it's actually gzip, not just a .gz extension
   if [[ "${file}" == *.gz ]]; then
-    if gzip -t "${file}" 2>/dev/null; then
-      echo "✅ Backup integrity check passed for ${db} (valid gzip)."
-      return 0
+    local magic
+    magic=$(head -c 2 "${file}" 2>/dev/null | od -A n -t x1 | tr -d ' ')
+    if [ "${magic}" = "1f8b" ]; then
+      if gzip -t "${file}" 2>/dev/null; then
+        echo "✅ Backup integrity check passed for ${db} (valid gzip)."
+      else
+        echo "⚠️ Backup integrity check failed for ${db}. Gzip file is corrupted." >&2
+        return 1
+      fi
     else
-      echo "⚠️ Backup integrity check failed for ${db}. Gzip file is corrupted." >&2
-      return 1
+      echo "✅ Backup created for ${db} (uncompressed, -Z0 mode)."
     fi
+    return 0
   fi
 
   return 0

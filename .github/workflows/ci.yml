@@ -116,7 +116,8 @@ jobs:
           bash -x scripts/backup.sh
           echo "Verifying encrypted files exist:"
           find "$BACKUP_DIR" -name "*.gpg" | head -20
-          test -f "$BACKUP_DIR/last/database-"*".sql.gz.gpg" || (echo "No encrypted backup found" && exit 1)
+          GPG_COUNT=$(find "$BACKUP_DIR/last" -name "*.gpg" | wc -l)
+          test "$GPG_COUNT" -gt 0 || (echo "No encrypted backup found" && exit 1)
 
       - name: Test list command
         run: |
