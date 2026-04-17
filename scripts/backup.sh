@@ -153,7 +153,7 @@ send_to_telegram() {
   file_size=$(get_size_bytes "${send_file}")
   if [ "${file_size}" -gt "${TELEGRAM_MAX_SIZE}" ]; then
     echo "⚠️ Backup $(get_size "${send_file}") exceeds Telegram 50MB limit. Skipping upload." >&2
-    [ -d "${file}" ] && rm -f "${send_file}"
+    if [ -d "${file}" ]; then rm -f "${send_file}"; fi
     return 1
   fi
 
@@ -186,7 +186,9 @@ send_to_telegram() {
   fi
 
   # Clean up temporary tar archive
-  [ -d "${file}" ] && rm -f "${send_file}"
+  if [ -d "${file}" ]; then
+    rm -f "${send_file}"
+  fi
 }
 
 # Send a text message to Telegram
