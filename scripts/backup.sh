@@ -173,11 +173,16 @@ send_to_telegram() {
     curl_args+=(-F "message_thread_id=${TELEGRAM_THREAD_ID}")
   fi
 
-  if curl -s --fail -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-    "${curl_args[@]}" > /dev/null; then
+  local response
+  response=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+    "${curl_args[@]}")
+
+  if echo "${response}" | grep -q '"ok":true'; then
     echo "✅ Backup sent to Telegram."
   else
-    echo "⚠️ Failed to send backup to Telegram. Backup is still saved locally." >&2
+    local error_desc
+    error_desc=$(echo "${response}" | grep -o '"description":"[^"]*"' | cut -d'"' -f4)
+    echo "⚠️ Failed to send backup to Telegram: ${error_desc:-unknown error}. Backup is still saved locally." >&2
   fi
 
   # Clean up temporary tar archive
