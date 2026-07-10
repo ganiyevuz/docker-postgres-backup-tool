@@ -110,9 +110,27 @@ func runUpload(ctx context.Context, args []string) error {
 	})
 }
 
-// credsFromEnv reads and validates the Telegram MTProto credentials.
+// defaultAPIID and defaultAPIHash are the shared fallback Telegram app
+// credentials, compiled in via -ldflags "-X main.defaultAPIID=... -X
+// main.defaultAPIHash=...". They are empty unless the image was built with the
+// tg_default_api build secret. They only identify the *app* to Telegram; the
+// bot token still authenticates and operator data is never exposed.
+var (
+	defaultAPIID   string
+	defaultAPIHash string
+)
+
+// credsFromEnv reads and validates the Telegram MTProto credentials, falling
+// back to the compiled-in shared defaults when the operator set neither
+// TELEGRAM_API_ID nor TELEGRAM_API_HASH.
 func credsFromEnv() (apiID int, apiHash, botToken string, err error) {
 	rawAPIID := os.Getenv("TELEGRAM_API_ID")
+	apiHash = os.Getenv("TELEGRAM_API_HASH")
+	if rawAPIID == "" && apiHash == "" && defaultAPIID != "" && defaultAPIHash != "" {
+		rawAPIID = defaultAPIID
+		apiHash = defaultAPIHash
+		fmt.Fprintln(os.Stderr, "tg-upload: ℹ️ using backupgram's shared Telegram app; set your own TELEGRAM_API_ID/TELEGRAM_API_HASH (https://my.telegram.org/apps) to be fully independent.")
+	}
 	if rawAPIID == "" {
 		return 0, "", "", errors.New("TELEGRAM_API_ID must be set")
 	}
@@ -120,7 +138,6 @@ func credsFromEnv() (apiID int, apiHash, botToken string, err error) {
 	if err != nil {
 		return 0, "", "", fmt.Errorf("invalid TELEGRAM_API_ID %q: %w", rawAPIID, err)
 	}
-	apiHash = os.Getenv("TELEGRAM_API_HASH")
 	botToken = os.Getenv("TELEGRAM_BOT_TOKEN")
 	if apiHash == "" || botToken == "" {
 		return 0, "", "", errors.New("TELEGRAM_API_HASH and TELEGRAM_BOT_TOKEN must be set")
