@@ -11,7 +11,10 @@ services:
     # Pin to a released tag in production instead of :latest.
     image: aiogram/telegram-bot-api:latest
     environment:
-      TELEGRAM_API_ID: "${TELEGRAM_API_ID}"     # https://my.telegram.org/apps
+      # This self-hosted Bot API server is an upstream image and needs its own
+      # credentials — set them in .env. (For zero-setup large files, prefer
+      # docker-compose.large-files-mtproto.yml, whose default ships in the image.)
+      TELEGRAM_API_ID: "${TELEGRAM_API_ID}"
       TELEGRAM_API_HASH: "${TELEGRAM_API_HASH}"
       TELEGRAM_LOCAL: "true"
     ports:

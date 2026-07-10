@@ -35,8 +35,10 @@ services:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
       # MTProto large-file upload — files up to 2 GB, no sidecar needed.
-      TELEGRAM_API_ID: "${TELEGRAM_API_ID}"
-      TELEGRAM_API_HASH: "${TELEGRAM_API_HASH}"
+      # Optional: the image ships a shared default app, so these can be omitted.
+      # Recommended for independence — uncomment and set your own:
+      # TELEGRAM_API_ID: "${TELEGRAM_API_ID}"
+      # TELEGRAM_API_HASH: "${TELEGRAM_API_HASH}"
 
       PROJECT_NAME: "Production Database"
     volumes:

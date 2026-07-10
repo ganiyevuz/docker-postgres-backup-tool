@@ -36,9 +36,10 @@ services:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       # Fan out to an ops channel + a personal chat (the bot must be a member of each).
       TELEGRAM_CHAT_ID: "-1001234567890,123456789"
-      # MTProto creds so large backups also fan out (uploaded once, sent to all).
-      TELEGRAM_API_ID: "${TELEGRAM_API_ID}"
-      TELEGRAM_API_HASH: "${TELEGRAM_API_HASH}"
+      # Large backups fan out too (uploaded once, sent to all) — the image ships a
+      # shared default app, so these are optional. Set your own for independence:
+      # TELEGRAM_API_ID: "${TELEGRAM_API_ID}"
+      # TELEGRAM_API_HASH: "${TELEGRAM_API_HASH}"
       TELEGRAM_UPLOAD_METHOD: "smart"      # smart | botapi | mtproto
 
       PROJECT_NAME: "Production Database"
