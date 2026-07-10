@@ -108,8 +108,34 @@ if [ -n "${TELEGRAM_API_HASH_FILE}" ] && [ -r "${TELEGRAM_API_HASH_FILE}" ]; the
   export TELEGRAM_API_HASH="$(cat "${TELEGRAM_API_HASH_FILE}")"
 fi
 
+# Fall back to backupgram's bundled shared Telegram app credentials when the
+# operator supplied neither their own id nor hash. Only the app *identity* is
+# shared — auth still uses the operator's own bot token and backups go to their
+# own chat, so operator data is never exposed. Opt out with
+# TELEGRAM_USE_DEFAULT_API=FALSE. The file is written at image build (root-only,
+# not an env var); it is intentionally out of the container's visible env.
+_DEFAULT_TG_API_FILE="/etc/backupgram/default-telegram-api"
+if [ "${TELEGRAM_USE_DEFAULT_API}" != "FALSE" ] \
+  && [ -z "${TELEGRAM_API_ID}" ] && [ -z "${TELEGRAM_API_HASH}" ] \
+  && [ -r "${_DEFAULT_TG_API_FILE}" ]; then
+  { read -r _def_api_id; read -r _def_api_hash; } < "${_DEFAULT_TG_API_FILE}"
+  if [ -n "${_def_api_id}" ] && [ -n "${_def_api_hash}" ]; then
+    export TELEGRAM_API_ID="${_def_api_id}"
+    export TELEGRAM_API_HASH="${_def_api_hash}"
+    TELEGRAM_API_IS_DEFAULT="TRUE"
+  fi
+  unset _def_api_id _def_api_hash
+fi
+
 if [ -n "${TELEGRAM_API_ID}" ] && [ -n "${TELEGRAM_API_HASH}" ]; then
-  echo "✅ Large-file upload enabled (MTProto, up to 2GB)."
+  if [ "${TELEGRAM_API_IS_DEFAULT}" = "TRUE" ]; then
+    echo "ℹ️ Large-file upload uses backupgram's shared Telegram app (MTProto, up to 2GB)."
+    echo "   Your backups and bot stay private — this only identifies the app to Telegram, so your data isn't affected at all."
+    echo "   Recommended: set your own TELEGRAM_API_ID / TELEGRAM_API_HASH (https://my.telegram.org/apps) to be fully on your own."
+    echo "   Disable the shared default with TELEGRAM_USE_DEFAULT_API=FALSE."
+  else
+    echo "✅ Large-file upload enabled (MTProto, up to 2GB)."
+  fi
 fi
 
 # Upload method selector: smart (auto by size) | botapi (Bot API only) | mtproto (binary only).
