@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 ARG BASETAG=latest
 
 # --- Build the MTProto large-file uploader (static, native cross-compile) ---
@@ -7,9 +8,14 @@ COPY tg-upload/go.mod tg-upload/go.sum ./
 RUN go mod download
 COPY tg-upload/ ./
 ARG TARGETOS TARGETARCH TARGETVARIANT
-RUN GOARM="$(echo "${TARGETVARIANT}" | sed 's/^v//')" \
+RUN --mount=type=secret,id=tg_default_api,required=false \
+    DEF_ID="$( [ -r /run/secrets/tg_default_api ] && sed -n '1p' /run/secrets/tg_default_api )"; \
+    DEF_HASH="$( [ -r /run/secrets/tg_default_api ] && sed -n '2p' /run/secrets/tg_default_api )"; \
+    GOARM="$(echo "${TARGETVARIANT}" | sed 's/^v//')" \
     GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" CGO_ENABLED=0 \
-    go build -trimpath -ldflags="-s -w" -o /out/tg-upload .
+    go build -trimpath \
+      -ldflags="-s -w -X main.defaultAPIID=${DEF_ID} -X main.defaultAPIHash=${DEF_HASH}" \
+      -o /out/tg-upload .
 
 # --- Build the REST API control server (static, native cross-compile) ---
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS apibuilder
@@ -90,6 +96,7 @@ ENV POSTGRES_DB="" \
     TELEGRAM_THREAD_ID="" \
     TELEGRAM_API_URL="https://api.telegram.org" \
     TELEGRAM_UPLOAD_METHOD="smart" \
+    TELEGRAM_USE_DEFAULT_API="TRUE" \
     PROJECT_NAME="" \
     BACKUP_ENCRYPTION_KEY="" \
     BACKUP_MIN_DISK_SPACE=100 \
@@ -102,6 +109,16 @@ ENV POSTGRES_DB="" \
 COPY --from=tgbuilder /out/tg-upload /usr/local/bin/tg-upload
 # REST API control server (built in the apibuilder stage)
 COPY --from=apibuilder /out/backupgram-api /usr/local/bin/backupgram-api
+
+# Bake the shared default Telegram app credentials as a ROOT-ONLY file (0600),
+# deliberately NOT an ENV var — so it stays out of `docker inspect` and
+# `docker exec <c> env`. Still extractable from the layer (see docs/LARGE_FILES.md);
+# operators are steered toward their own credentials.
+RUN --mount=type=secret,id=tg_default_api,required=false \
+    if [ -r /run/secrets/tg_default_api ]; then \
+      install -d -m 0755 /etc/backupgram \
+      && install -m 0600 /run/secrets/tg_default_api /etc/backupgram/default-telegram-api; \
+    fi
 
 # Copy scripts and hooks
 COPY hooks/ /hooks/
