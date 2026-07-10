@@ -37,6 +37,7 @@ var mutableKeys = map[string]keySpec{
 	"TELEGRAM_THREAD_ID":       {validate: validateAny},
 	"TELEGRAM_NOTIFY_ON":       {validate: validateNotifyOn},
 	"TELEGRAM_UPLOAD_METHOD":   {validate: validateUploadMethod},
+	"TELEGRAM_USE_DEFAULT_API": {validate: validateBoolWord},
 	"TELEGRAM_API_URL":         {validate: validateURL},
 	"BACKUP_MIN_DISK_SPACE":    {validate: validateUint},
 	"BACKUP_MAX_AGE_HOURS":     {validate: validateUint},
