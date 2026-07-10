@@ -180,8 +180,11 @@ flowchart TD
 
 - The 50 MB limit is enforced **only** against the official
   `https://api.telegram.org`; a custom self-hosted Bot API URL bypasses it.
-- MTProto upload requires `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`; without them,
-  oversized files are reported with a text alert instead.
+- MTProto upload uses your `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`, or the image's
+  built-in shared default app when they are unset (`env.sh` resolves it from the
+  root-only `/etc/backupgram/default-telegram-api`, baked from a build secret and
+  kept out of the container's env). With `TELEGRAM_USE_DEFAULT_API=FALSE` and no
+  creds, oversized files are reported with a text alert instead.
 - Multi-chat: `TELEGRAM_CHAT_ID` accepts a comma-separated list — the file is
   uploaded once and the resulting `file_id` is reused per chat.
 - Each delivered backup carries a `🔖 Restore ID` in its caption, consumed by

@@ -51,6 +51,8 @@ CI runs `./generate-docker-bake.sh docker-bake-generated.hcl && cmp docker-bake.
 
 Both Dockerfiles (`docker/debian.Dockerfile`, `docker/alpine.Dockerfile`) must be kept in lockstep — they share an identical `ENV` block (the canonical list of every variable + default) and identical symlink setup. Update both together.
 
+The shared default Telegram app is injected **only at build time** via the BuildKit secret `id=tg_default_api` (a two-line file: `api_id`, `api_hash`), which both Dockerfiles bake into `/etc/backupgram/default-telegram-api` (root-only, `0600`) and into the `tg-upload` binary via `-ldflags`. The source file `docker/default-telegram-api` is **gitignored — never commit it** and never put the values in `ENV`/`ARG`/docs. The committed base bake (`docker-bake.hcl`) carries no secret; the secret is added only by the CI-only override `docker-bake.secret.hcl`, and CI writes the source file from the `TG_DEFAULT_API_ID` / `TG_DEFAULT_API_HASH` repo secrets before `docker buildx bake -f docker-bake.hcl -f docker-bake.secret.hcl`. Local builds without the file simply ship no default (`env.sh` and `tg-upload` degrade gracefully).
+
 Build commands:
 
 ```sh

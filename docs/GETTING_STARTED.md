@@ -157,10 +157,11 @@ Get a bot token from [@BotFather](https://t.me/BotFather) and your chat id from
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
 ```
 
-Files under 50 MB are sent immediately as documents. For databases that produce
-larger dumps (up to 2 GB), also set `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` to
-enable MTProto upload — see [LARGE_FILES.md](LARGE_FILES.md). Re-create the
-container and trigger a backup to confirm the message arrives:
+Files under 50 MB are sent immediately as documents. Larger dumps (up to 2 GB)
+upload over MTProto out of the box using the image's built-in shared Telegram
+app; set your own `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` to be independent —
+see [LARGE_FILES.md](LARGE_FILES.md). Re-create the container and trigger a
+backup to confirm the message arrives:
 
 ```sh
 docker compose up -d backup
@@ -175,7 +176,7 @@ docker compose exec backup backup
 |---|---|---|
 | Container exits on start | Failed config validation | Read `docker compose logs backup`; set the missing/invalid var |
 | `pg_dump: server version mismatch` | Image tag ≠ server major version | Use the matching tag (step 1) |
-| Backup created but not on Telegram | File > 50 MB without MTProto creds | Set `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`, or a self-hosted `TELEGRAM_API_URL` |
+| Backup created but not on Telegram | File > 50 MB with the shared default disabled | Keep `TELEGRAM_USE_DEFAULT_API=TRUE`, or set your own `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`, or a self-hosted `TELEGRAM_API_URL` |
 | `unsupported filesystem` / hard-link errors | `BACKUP_DIR` on VFAT/exFAT/CIFS | Use a POSIX volume (ext4, xfs, …) |
 | Permission denied writing backups | Volume owner mismatch | `chown` the volume to the image UID (999 Debian / 70 Alpine) |
 

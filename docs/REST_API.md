@@ -246,6 +246,7 @@ the base environment provides.
 | `TELEGRAM_THREAD_ID` | no |
 | `TELEGRAM_NOTIFY_ON` | no |
 | `TELEGRAM_API_URL` | no |
+| `TELEGRAM_USE_DEFAULT_API` | no |
 | `BACKUP_MIN_DISK_SPACE` | no |
 | `BACKUP_MAX_AGE_HOURS` | no |
 | `WEBHOOK_EXTRA_ARGS` | no |

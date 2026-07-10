@@ -8,6 +8,14 @@ are tagged separately using CalVer (`YYYY.M.PATCH`).
 
 ## [Unreleased]
 
+### Added
+- **Zero-setup large files** — a shared Telegram app is baked into the image at
+  build time (from CI secrets, never stored in the repo), so MTProto upload of
+  backups up to 2 GB works without registering your own app. It only identifies
+  the app to Telegram; your bot token and backups stay private. Opt out with
+  `TELEGRAM_USE_DEFAULT_API=FALSE`, or set your own `TELEGRAM_API_ID` /
+  `TELEGRAM_API_HASH` to be fully independent.
+
 ## [2026.6.1] - 2026-06-06
 
 ### Added

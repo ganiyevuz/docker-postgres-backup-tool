@@ -77,18 +77,24 @@ counts used by `find -mtime`.
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | `""` | Bot token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_CHAT_ID` | `""` | Chat ID(s) — comma-separated for multiple destinations (get it from [@userinfobot](https://t.me/userinfobot)) |
-| `TELEGRAM_API_ID` | `""` | Telegram app `api_id` ([my.telegram.org](https://my.telegram.org/apps)). Enables built-in MTProto upload of backups up to 2 GB |
-| `TELEGRAM_API_HASH` | `""` | Telegram app `api_hash`. Required together with `TELEGRAM_API_ID` |
+| `TELEGRAM_API_ID` | `""` | Your Telegram app `api_id` ([my.telegram.org](https://my.telegram.org/apps)) for MTProto upload of backups up to 2 GB. Optional — the image ships a shared default app used when unset (see below); set your own to be independent |
+| `TELEGRAM_API_HASH` | `""` | Your Telegram app `api_hash`, paired with `TELEGRAM_API_ID` |
+| `TELEGRAM_USE_DEFAULT_API` | `TRUE` | When `TRUE`, large-file upload falls back to the image's built-in shared Telegram app if you set no `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`. Only identifies the app to Telegram — your bot token and backups stay private. Set `FALSE` to require your own |
 | `TELEGRAM_THREAD_ID` | `""` | Message thread ID for supergroup topics (applied only when a single chat is configured) |
-| `TELEGRAM_UPLOAD_METHOD` | `smart` | Backup-file transport: `smart` (auto by size), `botapi` (always Bot API via `curl`), or `mtproto` (always the bundled binary; requires `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`) |
+| `TELEGRAM_UPLOAD_METHOD` | `smart` | Backup-file transport: `smart` (auto by size), `botapi` (always Bot API via `curl`), or `mtproto` (always the bundled binary; uses your `TELEGRAM_API_ID`/`TELEGRAM_API_HASH` or the shared default) |
 | `TELEGRAM_NOTIFY_ON` | `all` | When to send notifications: `all`, `failure`, `success`, `none` |
 | `TELEGRAM_API_URL` | `https://api.telegram.org` | Bot API base URL. A custom (self-hosted) URL bypasses the 50 MB document limit check |
 | `PROJECT_NAME` | `""` | Label included in Telegram captions and alerts |
 
 Backup files under 50 MB are sent as documents via the Bot API. Larger files
-(up to 2 GB) are uploaded over MTProto by the bundled `tg-upload` binary when
-`TELEGRAM_API_ID` and `TELEGRAM_API_HASH` are set; otherwise they are reported
-with a text alert. See [LARGE_FILES.md](LARGE_FILES.md).
+(up to 2 GB) are uploaded over MTProto by the bundled `tg-upload` binary. This
+works out of the box using a shared Telegram app baked into the image, so no
+registration is needed. The shared app only identifies the app to Telegram —
+your bot token authenticates and backups go to your own chat, so your data is
+unaffected. Set your own `TELEGRAM_API_ID`/`TELEGRAM_API_HASH` to be fully
+independent, or `TELEGRAM_USE_DEFAULT_API=FALSE` to disable the shared default
+(large files are then reported with a text alert unless you supply your own).
+See [LARGE_FILES.md](LARGE_FILES.md).
 
 > The 50 MB limit is enforced **only** when `TELEGRAM_API_URL` is the official
 > `https://api.telegram.org`. A custom self-hosted Bot API URL bypasses it.
