@@ -24,3 +24,7 @@ docker-compose.local.yml
 .env
 .env.*
 !.env.example
+
+# Shared default Telegram app build secret — injected at build time only
+# (CI writes it from TG_DEFAULT_API_ID / TG_DEFAULT_API_HASH). Never commit.
+docker/default-telegram-api

@@ -17,13 +17,11 @@ variable "BUILD_REVISION" {
 target "debian" {
 	args = {"GOCRONVER" = "v0.0.11"}
 	dockerfile = "docker/debian.Dockerfile"
-	secret = ["id=tg_default_api,src=docker/default-telegram-api"]
 }
 
 target "alpine" {
 	args = {"GOCRONVER" = "v0.0.11"}
 	dockerfile = "docker/alpine.Dockerfile"
-	secret = ["id=tg_default_api,src=docker/default-telegram-api"]
 }
 
 target "debian-latest" {

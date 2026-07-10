@@ -280,8 +280,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Write the shared default Telegram app from repo secrets (build-time only,
+      # gitignored). On fork PRs the secrets are empty → an empty file → no default
+      # baked (graceful), which is fine for a build test.
+      - name: Write shared Telegram app secret (build-time only)
+        env:
+          TG_DEFAULT_API_ID: ${{ secrets.TG_DEFAULT_API_ID }}
+          TG_DEFAULT_API_HASH: ${{ secrets.TG_DEFAULT_API_HASH }}
+        run: printf '%s\n%s\n' "$TG_DEFAULT_API_ID" "$TG_DEFAULT_API_HASH" > docker/default-telegram-api
+
       - name: Build ${{ matrix.target }}
-        run: docker buildx bake --pull ${{ matrix.target }}
+        run: docker buildx bake -f docker-bake.hcl -f docker-bake.secret.hcl --pull ${{ matrix.target }}
 
   publish:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -324,8 +333,21 @@ jobs:
       - name: Configure build revision
         run: echo "BUILD_REVISION=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
 
+      # Bake the shared default Telegram app into the published image from repo
+      # secrets (build-time only, gitignored, never in a layer's history/ENV).
+      - name: Write shared Telegram app secret (build-time only)
+        env:
+          TG_DEFAULT_API_ID: ${{ secrets.TG_DEFAULT_API_ID }}
+          TG_DEFAULT_API_HASH: ${{ secrets.TG_DEFAULT_API_HASH }}
+        run: |
+          if [ -z "$TG_DEFAULT_API_ID" ] || [ -z "$TG_DEFAULT_API_HASH" ]; then
+            echo "::error::TG_DEFAULT_API_ID / TG_DEFAULT_API_HASH repo secrets are not set" >&2
+            exit 1
+          fi
+          printf '%s\n%s\n' "$TG_DEFAULT_API_ID" "$TG_DEFAULT_API_HASH" > docker/default-telegram-api
+
       - name: Build and push ${{ matrix.target }}
         env:
           REGISTRY_PREFIX: ${{ secrets.DOCKERHUB_USERNAME }}/
           BUILD_REVISION: ${{ env.BUILD_REVISION }}
-        run: docker buildx bake --pull --push ${{ matrix.target }}
+        run: docker buildx bake -f docker-bake.hcl -f docker-bake.secret.hcl --pull --push ${{ matrix.target }}
