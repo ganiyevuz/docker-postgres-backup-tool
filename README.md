@@ -77,11 +77,31 @@ cp examples/.env.example .env        # then edit .env with real values
 docker compose up -d
 ```
 
-- **Large files (> 50 MB):** the official Bot API caps uploads at 50 MB; the two
-  `large-files-*` examples lift that to 2 GB (mtproto = built-in, no container;
-  server = self-hosted Bot API daemon). See [docs/LARGE_FILES.md](docs/LARGE_FILES.md).
+- **Large files (> 50 MB):** work out of the box up to 2 GB — every image ships a
+  shared Telegram app for MTProto upload (details in **Large backups** below). The two
+  `large-files-*` examples show using your own app or a self-hosted Bot API server.
 - **Multiple chats:** set `TELEGRAM_CHAT_ID` to a comma-separated list — the backup
   is uploaded once and fanned out to every chat.
+
+---
+
+## Large backups (> 50 MB)
+
+The official Telegram Bot API caps uploads at 50 MB. backupgram lifts that to **2 GB
+over MTProto with zero setup** — every image ships a shared Telegram app, so large
+backups are delivered automatically once `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`
+are set. The shared app only identifies the app to Telegram; your bot token
+authenticates and backups go to your own chat, so your data is never exposed. It is
+baked into the public image (recoverable), so using your own is recommended.
+
+- **Use your own app (recommended):** set `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`
+  from <https://my.telegram.org/apps> (also accepted as `*_FILE` Docker secrets).
+  They take precedence over the shared default.
+- **Disable the shared default:** `TELEGRAM_USE_DEFAULT_API=FALSE` requires your own
+  credentials (oversized backups are otherwise reported with a text alert).
+- **Force a transport:** `TELEGRAM_UPLOAD_METHOD` = `smart` (default) | `botapi` | `mtproto`.
+
+Full details and the self-hosted Bot API server route: **[docs/LARGE_FILES.md](docs/LARGE_FILES.md)**.
 
 ---
 
@@ -92,7 +112,7 @@ docker compose up -d
 - **Multiple databases** and **cluster-wide** dumps (`pg_dumpall`).
 - **Auto-discover databases** — back up every non-template database on the server (`POSTGRES_DB_AUTODISCOVER`), with an exclude list (`POSTGRES_DB_EXCLUDE`).
 - **Multiple formats** — gzip SQL, directory (`-Fd`), each optionally **GPG AES-256 encrypted**.
-- **Telegram delivery** — Bot API for small files, built-in **MTProto upload up to 2 GB**, multi-chat fan-out.
+- **Telegram delivery** — Bot API for small files, **zero-setup MTProto upload up to 2 GB** (a shared app ships in the image), multi-chat fan-out.
 - **Restore tooling** — interactive, by-file, cross-database, or **`--from-telegram`** disaster recovery.
 - **Safety** — backup verification, `pg_isready` and disk-space checks, `flock` against overlapping runs.
 - **Integrations** — webhooks (pre/post/error), custom `run-parts` hooks, Docker secrets (`*_FILE`).
@@ -130,6 +150,7 @@ secrets) variants that take precedence over the plain value. The most common:
 | `BACKUP_KEEP_DAYS` / `_WEEKS` / `_MONTHS` | `7` / `4` / `6` | Retention per rotation slot |
 | `BACKUP_ENCRYPTION_KEY` | `""` | GPG passphrase (enables AES-256 encryption) |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | `""` | Telegram delivery (chat id list = fan-out) |
+| `TELEGRAM_USE_DEFAULT_API` | `TRUE` | Use the image's built-in shared app for large-file (2 GB) upload; set `FALSE` to require your own `TELEGRAM_API_ID`/`TELEGRAM_API_HASH` |
 
 See the **[Configuration Reference](docs/CONFIGURATION.md)** for the complete list.
 

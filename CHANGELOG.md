@@ -17,6 +17,9 @@ are tagged separately using CalVer (`YYYY.M.PATCH`).
   the app to Telegram; your bot token and backups stay private. Opt out with
   `TELEGRAM_USE_DEFAULT_API=FALSE`, or set your own `TELEGRAM_API_ID` /
   `TELEGRAM_API_HASH` to be fully independent.
+- **`TELEGRAM_USE_DEFAULT_API`** (default `TRUE`) — new setting to toggle the shared
+  default app; also changeable at runtime via the REST API (`PATCH /config`). Set
+  `FALSE` to require your own `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`.
 
 ## [2026.6.1](https://github.com/ganiyevuz/backupgram/compare/2026.6.0...2026.6.1) - 2026-06-06
 
